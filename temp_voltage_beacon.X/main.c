@@ -55,11 +55,25 @@ const bool INPUT = 1;
 const bool ON = 1;
 const bool OFF = 0;
 
-const bool ADC_MODULE_OFF = TRUE;
-const bool ADC_FVR_GAIN_BUFFER_OFF = TRUE;
-const bool COMPARATOR_FVR_GAIN_BUFFER_OFF = TRUE;
-const bool TEMPERATURE_SENSOR_OFF = TRUE;
-const bool LOW_POWER_SLEEP_MODE = TRUE;
+typedef enum {
+    ADC_MODULE_OFF,
+    ADC_MODULE_ON
+} AdcModuleMode;
+
+typedef enum {
+    ADC_FVR_GAIN_BUFFER_OFF,
+    ADC_FVR_GAIN_BUFFER_ON
+} AdcModuleFvrGainBufferMode;
+
+typedef enum {
+    COMPARATOR_FVR_GAIN_BUFFER_OFF,
+    COMPARATOR_FVR_GAIN_BUFFER_ON
+} ComparatorModuleFvrGainBufferMode;
+
+typedef enum {
+    TEMPERATURE_SENSOR_OFF,
+    TEMPERATURE_SENSOR_ON
+} TemperatureModuleMode;
 
 // ----------------------- LM335 TEMPERATURE SENSOR --------------------------------------------
 const unsigned char TEMPERATURE_SAMPLES = 4;
@@ -399,30 +413,32 @@ void usart_tx_line(const char* string) {
 
 // this works only when MCU configuration bit WDTE = SWDTEN
 void go_to_sleep(WatchdogInterval interval,
-                 bool adc_off,
-                 bool adc_fvr_gain_buffer_off,
-                 bool comparator_gain_fvr_buffer_off,
-                 bool temperature_sensor_off,
+                 AdcModuleMode adc_mode,
+                 AdcModuleFvrGainBufferMode adc_fvr_gain_buffer_mode,
+                 ComparatorModuleFvrGainBufferMode comparator_fvr_gain_buffer_mode,
+                 TemperatureModuleMode temperature_sensor_mode,
                  bool low_power_sleep_mode)
 {
     unsigned char adc_module_fvr_gain_buffer_previous_state;
     unsigned char comparator_module_fvr_gain_buffer_previous_state;
 
-    if(adc_off) {
+    if(adc_mode == ADC_MODULE_OFF) {
         ADC_OFF();
     }
 
-    if(adc_fvr_gain_buffer_off) {
+    if(adc_fvr_gain_buffer_mode == ADC_FVR_GAIN_BUFFER_OFF) {
+        // save previous buffer state first
         adc_module_fvr_gain_buffer_previous_state = FVRCONbits.ADFVR;
         fvr_gain_setup(ADC_MODULE, FVR_GAIN_OFF);
     }
 
-    if(comparator_gain_fvr_buffer_off) {
+    if(comparator_fvr_gain_buffer_mode == COMPARATOR_FVR_GAIN_BUFFER_OFF) {
+        // save previous buffer state first
         comparator_module_fvr_gain_buffer_previous_state = FVRCONbits.CDAFVR;
         fvr_gain_setup(COMPARATOR_MODULE, FVR_GAIN_OFF);
     }
 
-    if(temperature_sensor_off) {
+    if(temperature_sensor_mode == TEMPERATURE_SENSOR_OFF) {
         LM335_TEMPERATURE_SENSOR_DISABLE();
     }
 
@@ -491,7 +507,7 @@ void main(void) {
                 ADC_FVR_GAIN_BUFFER_OFF,
                 COMPARATOR_FVR_GAIN_BUFFER_OFF,
                 TEMPERATURE_SENSOR_OFF,
-                LOW_POWER_SLEEP_MODE
+                TRUE
         );
     }
 }
