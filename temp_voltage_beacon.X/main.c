@@ -64,11 +64,9 @@ const bool LOW_POWER_SLEEP_MODE = TRUE;
 // ----------------------- LM335 TEMPERATURE SENSOR --------------------------------------------
 const unsigned char TEMPERATURE_SAMPLES = 4;
 const unsigned int TEMPERATURE_CORRECTION_FACTOR = 1;
-// this should be equal to Vdd or FVR multiplied by gain factor if any
-// we use FVR and a 4x gain so it will be approx 4V
-const unsigned int TEMPERATURE_ADC_VREF = 4;
+const unsigned int TEMPERATURE_ADC_VREF = 3; // this should be equal to Vdd if FVR is not enabled
 const unsigned int KELVIN_TO_CELSIUS_CONSTANT = 273;
-const unsigned int TEMPERATURE_SENSOR_SLOPE = 10;   // sensor temperature output is K/10mv
+const unsigned int TEMPERATURE_SENSOR_SLOPE = 10;  // sensor temperature output is K/10mv
 // ------------------- END LM335 TEMPERATURE SENSOR --------------------------------------------
 
 #define WATCHDOG_ON()   WDTCONbits.SWDTEN = TRUE
@@ -327,6 +325,7 @@ unsigned int read_adc(ADCChannelSelect channel) {
 void read_lm335_temperature(ADCChannelSelect cs,
                             unsigned char samples,
                             int correction_factor,
+                            unsigned int temp_adc_vref,
                             Float* temp_result)
 {
     unsigned int avg_adc = 0;
@@ -336,7 +335,11 @@ void read_lm335_temperature(ADCChannelSelect cs,
         avg_adc += read_adc(cs) / samples;
     }
 
-    float_div((avg_adc * TEMPERATURE_ADC_VREF), TEMPERATURE_SENSOR_SLOPE, temp_result);
+    // select adc vref based on fvr status
+    float_div((avg_adc * (FVRCONbits.FVREN ? (FVRCONbits.ADFVR + 1) : temp_adc_vref)),
+                TEMPERATURE_SENSOR_SLOPE,
+                temp_result
+    );
 
     // temperature value resulted from voltage ADC conversion is in Kelvin - need Celsius
     float_sub(temp_result, KELVIN_TO_CELSIUS_CONSTANT, temp_result);
@@ -469,6 +472,7 @@ void main(void) {
                 AN2_CHANNEL,
                 TEMPERATURE_SAMPLES,
                 TEMPERATURE_CORRECTION_FACTOR,
+                TEMPERATURE_ADC_VREF,
                 &temperature
         );
 
