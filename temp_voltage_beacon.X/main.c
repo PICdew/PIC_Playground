@@ -35,15 +35,41 @@
 #pragma config LPBOREN = OFF    // Low Power Brown-out Reset enable bit (LPBOR is disabled)
 #pragma config LVP = ON         // Low-Voltage Programming Enable (Low-voltage programming enabled)
 
+// simple float number representation with one decimal point value
+typedef struct {
+    int integral;
+    unsigned int floating;
+} Float;
 
-#define DIGITAL 0
-#define ANALOG  1
+typedef unsigned char bool;
 
-#define OUTPUT  0
-#define INPUT   1
+const bool TRUE = 1;
+const bool FALSE = 0;
 
-#define ON  1
-#define OFF  0
+const bool DIGITAL = 0;
+const bool ANALOG  = 1;
+
+const bool OUTPUT = 0;
+const bool INPUT = 1;
+
+const bool ON = 1;
+const bool OFF = 0;
+
+const bool ADC_MODULE_OFF = TRUE;
+const bool ADC_FVR_GAIN_BUFFER_OFF = TRUE;
+const bool COMPARATOR_FVR_GAIN_BUFFER_OFF = TRUE;
+const bool TEMPERATURE_SENSOR_OFF = TRUE;
+const bool LOW_POWER_SLEEP_MODE = TRUE;
+
+// ----------------------- LM335 TEMPERATURE SENSOR --------------------------------------------
+const unsigned char TEMPERATURE_SAMPLES = 4;
+const unsigned int TEMPERATURE_CORRECTION_FACTOR = 1;
+// this should be equal to Vdd or FVR multiplied by gain factor if any
+// we use FVR and a 4x gain so it will be approx 4V
+const unsigned int TEMPERATURE_ADC_VREF = 4;
+const unsigned int KELVIN_TO_CELSIUS_CONSTANT = 273;
+const unsigned int TEMPERATURE_SENSOR_SLOPE = 10;   // sensor temperature output is K/10mv
+// ------------------- END LM335 TEMPERATURE SENSOR --------------------------------------------
 
 #define WATCHDOG_ON()   WDTCONbits.SWDTEN = TRUE
 #define WATCHDOG_OFF()   WDTCONbits.SWDTEN = FALSE
@@ -53,24 +79,6 @@
 
 #define LM335_TEMPERATURE_SENSOR_ENABLE()   LATAbits.LATA5 = ON
 #define LM335_TEMPERATURE_SENSOR_DISABLE()   LATAbits.LATA5 = OFF
-
-// simple float number representation with one decimal point value
-typedef struct {
-    int integral;
-    unsigned int floating;
-} Float;
-
-typedef unsigned char bool;
-const bool FALSE = 0;
-const bool TRUE = 1;
-
-const unsigned char TEMPERATURE_SAMPLES = 4;
-const unsigned int TEMPERATURE_CORRECTION_FACTOR = 1;
-// this should be equal to Vdd or FVR multiplied by gain factor if any
-// we use FVR and a 4x gain so it will be approx 4V
-const unsigned int TEMPERATURE_ADC_VREF = 4;
-const unsigned int KELVIN_TO_CELSIUS_CONSTANT = 273;
-const unsigned int TEMPERATURE_SENSOR_SLOPE = 10;   // sensor temperature output is K/10mv
 
 // possible internal oscillator clock values
 typedef enum {
@@ -389,11 +397,26 @@ void usart_tx_line(const char* string) {
 // this works only when MCU configuration bit WDTE = SWDTEN
 void go_to_sleep(WatchdogInterval interval,
                  bool adc_off,
+                 bool adc_fvr_gain_buffer_off,
+                 bool comparator_gain_fvr_buffer_off,
                  bool temperature_sensor_off,
                  bool low_power_sleep_mode)
 {
+    unsigned char adc_module_fvr_gain_buffer_previous_state;
+    unsigned char comparator_module_fvr_gain_buffer_previous_state;
+
     if(adc_off) {
         ADC_OFF();
+    }
+
+    if(adc_fvr_gain_buffer_off) {
+        adc_module_fvr_gain_buffer_previous_state = FVRCONbits.ADFVR;
+        fvr_gain_setup(ADC_MODULE, FVR_GAIN_OFF);
+    }
+
+    if(comparator_gain_fvr_buffer_off) {
+        comparator_module_fvr_gain_buffer_previous_state = FVRCONbits.CDAFVR;
+        fvr_gain_setup(COMPARATOR_MODULE, FVR_GAIN_OFF);
     }
 
     if(temperature_sensor_off) {
@@ -410,8 +433,12 @@ void go_to_sleep(WatchdogInterval interval,
 
     SLEEP(); // go to sleep
 
+    // restore gain buffers previous states on wake up
+    fvr_gain_setup(ADC_MODULE, adc_module_fvr_gain_buffer_previous_state);
+    fvr_gain_setup(COMPARATOR_MODULE, comparator_module_fvr_gain_buffer_previous_state);
+
     ADC_ON(); // on wake up turn ADC back on
-    LM335_TEMPERATURE_SENSOR_ENABLE();
+    LM335_TEMPERATURE_SENSOR_ENABLE(); // on wake up turn LM335 back on
     _delay(10000);
 }
 
@@ -424,9 +451,6 @@ void mcu_init() {
 
     // enable adc using its separate RC oscillator and FVR with 4x gain
     adc_setup(FRC0, FVR, FVR_GAIN_4X);
-
-    // turn off FVR gain buffers if not needed to conserver power
-    fvr_gain_setup(COMPARATOR_MODULE, FVR_GAIN_OFF);
 
     // set usart baudrate based on system clock frequency
     usart_setup(9600, HF_CLOCK_1MHz);
@@ -447,13 +471,23 @@ void main(void) {
                 TEMPERATURE_CORRECTION_FACTOR,
                 &temperature
         );
+
         sprintf(
             buff,
             "T=%d.%d,V=0",
             temperature.integral,
             temperature.floating
         );
+
         usart_tx_line(buff);
-        go_to_sleep(WDT_8S, TRUE, TRUE, TRUE);
+        
+        go_to_sleep(
+                WDT_8S,
+                ADC_MODULE_OFF,
+                ADC_FVR_GAIN_BUFFER_OFF,
+                COMPARATOR_FVR_GAIN_BUFFER_OFF,
+                TEMPERATURE_SENSOR_OFF,
+                LOW_POWER_SLEEP_MODE
+        );
     }
 }
