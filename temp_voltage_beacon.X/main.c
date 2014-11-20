@@ -93,11 +93,16 @@ const unsigned int TEMPERATURE_SENSOR_SLOPE = 10;  // sensor temperature output 
 
 #define ADC_ON()    ADCON0bits.ADON = TRUE
 #define ADC_OFF()    ADCON0bits.ADON = FALSE
-#define ADC_STATE(state)    ADCON0bits.ADON = state
+#define ADC_SET_STATE(state)    ADCON0bits.ADON = state
+#define ADC_GET_STATE()    ADCON0bits.ADON
 
 #define LM335_TEMPERATURE_SENSOR_ENABLE()   LATAbits.LATA5 = ON
 #define LM335_TEMPERATURE_SENSOR_DISABLE()   LATAbits.LATA5 = OFF
-#define LM335_TEMPERATURE_SENSOR_STATE(state)   LATAbits.LATA5 = state
+#define LM335_TEMPERATURE_SENSOR_SET_STATE(state)   LATAbits.LATA5 = state
+#define LM335_TEMPERATURE_SENSOR_GET_STATE()   LATAbits.LATA5
+
+#define ADC_FVR_GAIN_BUFFER_GET_STATE() FVRCONbits.ADFVR
+#define COMPARATOR_FVR_GAIN_BUFFER_GET_STATE()   FVRCONbits.CDAFVR
 
 // possible internal oscillator clock values
 typedef enum {
@@ -314,7 +319,6 @@ void usart_setup(unsigned int baudrate, ClockSelect cs) {
     SPBRGL = (unsigned char)(BRG & 0x00FF);
 
     BAUDCONbits.BRG16 = TRUE; // enable 16 bit  baudrate generator
-    //TXSTAbits.BRGH = TRUE;    // for lower system clock frequencies
     TXSTAbits.SYNC = FALSE; // asynchronous operation
     RCSTAbits.SPEN = TRUE;  // enable serial port TX/RX pins
     TXSTAbits.TXEN = TRUE;  // enable transmitter
@@ -335,6 +339,9 @@ void adc_setup(ADCClockSelect cs, ADCPVREFSelect pvref, FVRGainSelect gs) {
 }
 
 unsigned int read_adc(ADCChannelSelect channel) {
+    ADC_ON();
+    _delay(10000);
+
     ADCON0bits.CHS = channel; // select ADC channel to perform conversion on
     _delay(10000);  // give it a break
     ADCON0bits.GO_nDONE = TRUE; // start ADC conversion
@@ -350,6 +357,9 @@ void read_lm335_temperature(ADCChannelSelect cs,
                             Float* temp_result)
 {
     unsigned int avg_adc = 0;
+
+    LM335_TEMPERATURE_SENSOR_ENABLE();
+    _delay(10000);
 
     // average values read from ADC for better readings
     for(unsigned char i = 0; i < samples; i++) {
@@ -426,20 +436,19 @@ void go_to_sleep(WatchdogInterval interval,
                  TemperatureModuleMode temperature_sensor_mode,
                  LDOVoltageRegModuleMode ldo_voltage_regulator_mode)
 {
-    unsigned char adc_module_fvr_gain_buffer_previous_state;
-    unsigned char comparator_module_fvr_gain_buffer_previous_state;
+    // save components previous state first
+    unsigned char adc_module_fvr_gain_buffer_previous_state = ADC_FVR_GAIN_BUFFER_GET_STATE();
+    unsigned char comparator_module_fvr_gain_buffer_previous_state = COMPARATOR_FVR_GAIN_BUFFER_GET_STATE();
+    unsigned char adc_previous_state = ADC_GET_STATE();
+    unsigned char lm335_temperature_sensor_previous_state = LM335_TEMPERATURE_SENSOR_GET_STATE();
 
-    ADC_STATE(adc_mode);
+    ADC_SET_STATE(adc_mode);
 
-    // save previous buffer state first
-    adc_module_fvr_gain_buffer_previous_state = FVRCONbits.ADFVR;
     fvr_gain_setup(ADC_MODULE, adc_fvr_gain_buffer_mode);
 
-    // save previous buffer state first
-    comparator_module_fvr_gain_buffer_previous_state = FVRCONbits.CDAFVR;
     fvr_gain_setup(COMPARATOR_MODULE, comparator_fvr_gain_buffer_mode);
 
-    LM335_TEMPERATURE_SENSOR_STATE(temperature_sensor_mode);
+    LM335_TEMPERATURE_SENSOR_SET_STATE(temperature_sensor_mode);
 
     VREGCONbits.VREGPM = ldo_voltage_regulator_mode;
 
@@ -453,14 +462,14 @@ void go_to_sleep(WatchdogInterval interval,
     fvr_gain_setup(ADC_MODULE, adc_module_fvr_gain_buffer_previous_state);
     fvr_gain_setup(COMPARATOR_MODULE, comparator_module_fvr_gain_buffer_previous_state);
 
-    ADC_ON(); // on wake up turn ADC back on
-    LM335_TEMPERATURE_SENSOR_ENABLE(); // on wake up turn LM335 back on
+    ADC_SET_STATE(adc_previous_state); // on wake up set previous ADC state
+    LM335_TEMPERATURE_SENSOR_SET_STATE(lm335_temperature_sensor_previous_state); // on wake up set LM335 previous state
     _delay(10000);
 }
 
 void mcu_init() {
     // set system clock working frequency
-    system_clock_setup(HF_CLOCK_4MHz, FALSE);
+    system_clock_setup(HF_CLOCK_8MHz, FALSE);
 
     // set ports direction
     ports_setup();
@@ -469,11 +478,11 @@ void mcu_init() {
     adc_setup(FRC0, FVR, FVR_GAIN_4X);
 
     // set usart baudrate based on system clock frequency
-    usart_setup(9600, HF_CLOCK_4MHz);
+    usart_setup(9600, HF_CLOCK_8MHz);
 }
 
 void main(void) {
-    static char buff[32];
+    static char buff[16];
     static Float temperature;
 
     mcu_init();
@@ -489,6 +498,7 @@ void main(void) {
                 &temperature
         );
 
+        memset(buff, '\0', sizeof(buff));
         sprintf(
             buff,
             "T=%d.%d,V=0",
@@ -497,7 +507,7 @@ void main(void) {
         );
 
         usart_tx_line(buff);
-        
+
         go_to_sleep(
                 WDT_8S,
                 ADC_MODULE_OFF,
