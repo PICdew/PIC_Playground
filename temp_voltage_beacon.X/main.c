@@ -314,7 +314,7 @@ void usart_setup(unsigned int baudrate, ClockSelect cs) {
     SPBRGL = (unsigned char)(BRG & 0x00FF);
 
     BAUDCONbits.BRG16 = TRUE; // enable 16 bit  baudrate generator
-    TXSTAbits.BRGH = TRUE;    // for lower system clock frequencies
+    //TXSTAbits.BRGH = TRUE;    // for lower system clock frequencies
     TXSTAbits.SYNC = FALSE; // asynchronous operation
     RCSTAbits.SPEN = TRUE;  // enable serial port TX/RX pins
     TXSTAbits.TXEN = TRUE;  // enable transmitter
@@ -460,7 +460,7 @@ void go_to_sleep(WatchdogInterval interval,
 
 void mcu_init() {
     // set system clock working frequency
-    system_clock_setup(HF_CLOCK_1MHz, FALSE);
+    system_clock_setup(HF_CLOCK_4MHz, FALSE);
 
     // set ports direction
     ports_setup();
@@ -469,7 +469,7 @@ void mcu_init() {
     adc_setup(FRC0, FVR, FVR_GAIN_4X);
 
     // set usart baudrate based on system clock frequency
-    usart_setup(9600, HF_CLOCK_1MHz);
+    usart_setup(9600, HF_CLOCK_4MHz);
 }
 
 void main(void) {
