@@ -20,7 +20,7 @@ static __code uint16_t __at(_CONFIG1) configword1 = _FOSC_INTOSC & _WDTE_OFF & _
 
 #define USART_DEBUG
 #define USART_DEBUG_BUFF_SIZE               4
-#define TOUCH_SENSOR_SAMPLES                60
+#define TOUCH_SENSOR_SAMPLES                50
 #define SENSOR_TOUCHED_DELTA_THRESHOLD      20
 
 #define abs(val)    (val < 0 ? -val : val)
