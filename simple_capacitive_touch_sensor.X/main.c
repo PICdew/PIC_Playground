@@ -20,17 +20,17 @@ static __code uint16_t __at(_CONFIG1) configword1 = _FOSC_INTOSC & _WDTE_OFF & _
 
 #define USART_DEBUG
 #define USART_DEBUG_BUFF_SIZE               4
-#define TOUCH_SENSOR_SAMPLES                50
-#define SENSOR_TOUCHED_DELTA_THRESHOLD      20
+#define TOUCH_SENSOR_SAMPLES                30
+#define SENSOR_TOUCHED_DELTA_THRESHOLD      15
 
 #define abs(val)    (val < 0 ? -val : val)
 
 #ifdef USART_DEBUG
-char buff[USART_DEBUG_BUFF_SIZE];
+static char buff[USART_DEBUG_BUFF_SIZE];
 
 #define NUMBER_OF_DIGITS 16   /* space for NUMBER_OF_DIGITS + '\0' */
 
-void uitoa(uint16_t value, char* string, uint16_t radix) {
+static void uitoa(uint16_t value, char* string, uint16_t radix) {
     uint8_t index, i;
 
     index = NUMBER_OF_DIGITS;
@@ -49,7 +49,7 @@ void uitoa(uint16_t value, char* string, uint16_t radix) {
     string[i] = 0; /* string terminator */
 }
 
-void itoa(int16_t value, char* string, int16_t radix) {
+static void itoa(int16_t value, char* string, int16_t radix) {
     if (value < 0 && radix == 10) {
         *string++ = '-';
         uitoa(-value, string, radix);
@@ -106,11 +106,13 @@ static void usart_tx_line(const char* str) {
 #endif
 
 static void delay_us(uint32_t us) {
-    for (uint32_t i = 0; i < us; i++);
+    uint32_t i = 0;
+    for (i = 0; i < us; i++);
 }
 
 static void delay_ms(uint32_t ms) {
-    for (uint32_t i = 0; i < (ms * 320); i++);
+    uint32_t i = 0;
+    for (i = 0; i < (ms * 320); i++);
 }
 
 static uint16_t read_adc(void) {
@@ -186,7 +188,8 @@ static void check_touch_sensor1(void) {
     static int16_t last_touch_avg1 = 0;
     int16_t current_touch_avg1 = 0;
 
-    for (uint8_t i = 0; i < TOUCH_SENSOR_SAMPLES; i++) {
+    uint8_t i = 0;
+    for (i = 0; i < TOUCH_SENSOR_SAMPLES; i++) {
         current_touch_avg1 += read_touch_sensor1() / TOUCH_SENSOR_SAMPLES;
     }
 
@@ -207,7 +210,8 @@ static void check_touch_sensor2(void) {
     static int16_t last_touch_avg2 = 0;
     int16_t current_touch_avg2 = 0;
 
-    for (uint8_t i = 0; i < TOUCH_SENSOR_SAMPLES; i++) {
+    uint8_t i = 0;
+    for (i = 0; i < TOUCH_SENSOR_SAMPLES; i++) {
         current_touch_avg2 += read_touch_sensor2() / TOUCH_SENSOR_SAMPLES;
     }
 
