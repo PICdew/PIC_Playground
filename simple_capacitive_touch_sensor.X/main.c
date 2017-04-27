@@ -13,15 +13,15 @@
  */
 
 #define NO_BIT_DEFINES
-#include <pic12f1572.h>
+#include <pic14regs.h>
 #include <stdint.h>
 
 static __code uint16_t __at(_CONFIG1) configword1 = _FOSC_INTOSC & _WDTE_OFF & _BOREN_ON & _LVP_ON;
 
-#define USART_DEBUG
+//#define USART_DEBUG
 #define USART_DEBUG_BUFF_SIZE               4
 #define TOUCH_SENSOR_SAMPLES                30
-#define SENSOR_TOUCHED_DELTA_THRESHOLD      15
+#define SENSOR_TOUCHED_DELTA_THRESHOLD      10
 
 #define abs(val)    (val < 0 ? -val : val)
 
@@ -60,10 +60,40 @@ static void itoa(int16_t value, char* string, int16_t radix) {
 #endif 
 
 static void config_internal_osc(void) {
-    OSCCONbits.IRCF = 0b1110; // internal HF osc at 8MHz
-    //OSCCONbits.SCS = 0;
-    OSCCONbits.SPLLEN = 1; // enable PLL x 4 -> Fosc is now 32MHz
+    OSCCONbits.IRCF = 0b1111; // internal HF osc at 16MHz
     while (!OSCSTATbits.HFIOFR); // wait until internal HF osc is ready
+}
+
+static void config_io_ports(void) {
+    // ----------- TOUCH SENSORS SETUP -------------------------------
+    // ground sensor line(RA2)
+    TRISAbits.TRISA2 = 0; // RA2 as output
+    ANSELAbits.ANSA2 = 0; // RA2 disable analog
+    WPUAbits.WPUA2 = 0; // disable RA2 pull-up
+    LATAbits.LATA2 = 0; // write logic zero to RA2(short touch sensor to GND)
+    // ground sensor line(RA4)
+    TRISAbits.TRISA4 = 0; // RA4 as output
+    ANSELAbits.ANSA4 = 0; // RA4 disable analog
+    WPUAbits.WPUA4 = 0; // disable RA4 pull-up
+    LATAbits.LATA4 = 0; // write logic zero to RA4(short touch sensor to GND)
+    
+    
+    // ------------------- LEDS SETUP ------------------------
+    // prepare RA1 as digital out
+    TRISAbits.TRISA1 = 0; // RA1 as output
+    ANSELAbits.ANSA1 = 0; // RA1 disable analog
+    WPUAbits.WPUA1 = 0; // disable RA1 pull-up
+
+    // prepare RA5 as digital out
+    TRISAbits.TRISA5 = 0; // RA5 as output
+    //ANSELAbits.ANSA5 = 0; // RA5 disable analog
+    WPUAbits.WPUA5 = 0; // disable RA5 pull-up
+    
+    // write logic zero to RA1
+    LATAbits.LATA1 = 0;
+    
+    // write logic zero to RA5
+    LATAbits.LATA5 = 0;
 }
 
 #ifdef USART_DEBUG
@@ -72,9 +102,9 @@ static void config_usart(void) {
     TXSTAbits.TXEN = 1; // enable usart tx
     TXSTAbits.SYNC = 0; // enable async mode
     RCSTAbits.SPEN = 1; // enable rx/tx port pins
-    BAUDCONbits.BRG16 = 1; // 16 bit baudrate generator
+    BAUDCONbits.BRG16 = 0; // 8 bit baudrate generator
     TXSTAbits.BRGH = 0; // low speed async mode
-    SPBRG = 51; // 9600 bps
+    SPBRG = 25; // 9600 bps
 }
 #endif
 
@@ -112,12 +142,12 @@ static void delay_us(uint32_t us) {
 
 static void delay_ms(uint32_t ms) {
     uint32_t i = 0;
-    for (i = 0; i < (ms * 320); i++);
+    for (i = 0; i < (ms * 160); i++);
 }
 
 static uint16_t read_adc(void) {
     ADCON0bits.ADON = 1; // enable ADC
-    delay_us(50);
+    delay_us(30);
     ADCON0bits.GO = 1; // start a conversion
     while (ADCON0bits.GO_NOT_DONE);
 
@@ -125,10 +155,15 @@ static uint16_t read_adc(void) {
 }
 
 static uint16_t read_touch_sensor1(void) {
+    // ground sensor line(RA4)
+    TRISAbits.TRISA4 = 0; // RA4 as output
+    ANSELAbits.ANSA4 = 0; // RA4 disable analog
+    LATAbits.LATA4 = 0; // write logic zero to RA4(short touch sensor to GND)
+    delay_us(20);
+    
     // prepare RA2 as ADC sampling capacitor charger to Vdd
     TRISAbits.TRISA2 = 0; // RA2 as output
     ANSELAbits.ANSA2 = 0; // RA2 disable analog
-    WPUAbits.WPUA2 = 0; // disable RA2 pull-up
 
     // write logic one to RA2 for next step(tie RA2 to Vdd)
     LATAbits.LATA2 = 1;
@@ -136,12 +171,7 @@ static uint16_t read_touch_sensor1(void) {
     // AN2 channel selected - 
     //  charge ADC sampling capacitor from Vdd by connecting to RA2
     ADCON0bits.CHS = 2;
-    delay_us(50);
-
-    // ground sensor line(RA4)
-    TRISAbits.TRISA4 = 0; // RA4 as output
-    ANSELAbits.ANSA4 = 0; // RA4 disable analog
-    LATAbits.LATA4 = 0; // write logic zero to RA4(short touch sensor to GND)
+    delay_us(20);
 
     // set sensor line (RA4) as input
     TRISAbits.TRISA4 = 1; // RA4 as input
@@ -154,11 +184,15 @@ static uint16_t read_touch_sensor1(void) {
 }
 
 static uint16_t read_touch_sensor2(void) {
-
+    // ground sensor line(RA2)
+    TRISAbits.TRISA2 = 0; // RA2 as output
+    ANSELAbits.ANSA2 = 0; // RA2 disable analog
+    LATAbits.LATA2 = 0; // write logic zero to RA2(short touch sensor to GND)
+    delay_us(20);
+    
     // prepare RA4 as ADC sampling capacitor charger to Vdd
     TRISAbits.TRISA4 = 0; // RA4 as output
     ANSELAbits.ANSA4 = 0; // RA4 disable analog
-    WPUAbits.WPUA4 = 0; // disable RA4 pull-up
 
     // write logic one to RA4 for next step(tie RA4 to Vdd)
     LATAbits.LATA4 = 1;
@@ -166,12 +200,7 @@ static uint16_t read_touch_sensor2(void) {
     // AN3 channel selected - 
     //  charge ADC sampling capacitor from Vdd by connecting to RA4
     ADCON0bits.CHS = 3;
-    delay_us(50);
-
-    // ground sensor line(RA2)
-    TRISAbits.TRISA2 = 0; // RA2 as output
-    ANSELAbits.ANSA2 = 0; // RA2 disable analog
-    LATAbits.LATA2 = 0; // write logic zero to RA2(short touch sensor to GND)
+    delay_us(20);
 
     // set sensor line (RA2) as input
     TRISAbits.TRISA2 = 1; // RA2 as input
@@ -197,6 +226,8 @@ static void check_touch_sensor1(void) {
 #ifdef USART_DEBUG
         usart_tx_char('1');
         usart_tx_line(" - touched!");
+#else
+        LATAbits.LATA1 = !LATAbits.LATA1;
 #endif
     }
     
@@ -219,6 +250,8 @@ static void check_touch_sensor2(void) {
 #ifdef USART_DEBUG
         usart_tx_char('2');
         usart_tx_line(" - touched!");
+#else
+        LATAbits.LATA5 = !LATAbits.LATA5;
 #endif
     }
 
@@ -230,6 +263,7 @@ static void check_touch_sensor2(void) {
 
 void main(void) {
     config_internal_osc();
+    config_io_ports();
 #ifdef USART_DEBUG
     config_usart();
 #endif
